@@ -22,17 +22,32 @@ use Webkul\Support\Models\Scopes\CompanyScope;
 
 class CheckInOut extends Component
 {
+    public const MODAL_ID = 'attendances-check-in-out';
+
     public function boot(): void
     {
         abort_unless(Filament::auth()->check(), 403);
     }
 
-    #[Computed]
-    public function employee(): ?Employee
+    public static function currentEmployee(): ?Employee
     {
+        if (! Filament::auth()->check() || ! app(AttendanceSettings::class)->enable_top_bar) {
+            return null;
+        }
+
+        if (! Gate::allows('viewAny', Attendance::class)) {
+            return null;
+        }
+
         return Employee::withoutGlobalScope(CompanyScope::class)
             ->where('user_id', Filament::auth()->id())
             ->first();
+    }
+
+    #[Computed]
+    public function employee(): ?Employee
+    {
+        return static::currentEmployee();
     }
 
     #[Computed]
@@ -41,13 +56,6 @@ class CheckInOut extends Component
         return $this->employee
             ? app(AttendanceWorkflow::class)->openAttendance($this->employee)
             : null;
-    }
-
-    public function isVisible(): bool
-    {
-        return $this->employee
-            && app(AttendanceSettings::class)->enable_top_bar
-            && Gate::allows('viewAny', Attendance::class);
     }
 
     public function hoursToday(): float
@@ -78,7 +86,7 @@ class CheckInOut extends Component
 
     public function toggle(): void
     {
-        if (! $this->isVisible()) {
+        if (! $this->employee) {
             return;
         }
 
@@ -102,14 +110,14 @@ class CheckInOut extends Component
             return;
         }
 
-        unset($this->openAttendance);
-
         Notification::make()
             ->success()
             ->title($attendance->check_out
                 ? __('attendances::livewire/check-in-out.notifications.checked-out')
                 : __('attendances::livewire/check-in-out.notifications.checked-in'))
             ->send();
+
+        $this->redirect(url()->previous(), navigate: true);
     }
 
     public function render(): View

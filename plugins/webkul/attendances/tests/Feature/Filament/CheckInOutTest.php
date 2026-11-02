@@ -7,8 +7,10 @@ require_once __DIR__.'/../../Helpers/AttendanceHelper.php';
 
 use Livewire\Livewire;
 use Webkul\Attendance\Enums\AttendanceMode;
+use Webkul\Attendance\Filament\Clusters\Overview\Resources\AttendanceResource;
 use Webkul\Attendance\Livewire\CheckInOut;
 use Webkul\Attendance\Models\Attendance;
+use Webkul\Attendance\Services\AttendanceWorkflow;
 
 beforeEach(function () {
     TestBootstrapHelper::ensurePluginInstalled('attendances');
@@ -27,11 +29,11 @@ afterEach(fn () => SecurityHelper::restoreUserEvents());
 it('checks the linked employee in and out from the top bar', function () {
     $employee = AttendanceHelper::scheduledEmployee(attributes: ['user_id' => $this->user->id]);
 
-    $component = Livewire::test(CheckInOut::class)
+    Livewire::test(CheckInOut::class)
         ->assertSee(__('attendances::livewire/check-in-out.actions.check-in'))
         ->call('toggle')
         ->assertNotified(__('attendances::livewire/check-in-out.notifications.checked-in'))
-        ->assertSee(__('attendances::livewire/check-in-out.actions.check-out'));
+        ->assertRedirect();
 
     $attendance = Attendance::where('employee_id', $employee->id)->sole();
 
@@ -40,15 +42,17 @@ it('checks the linked employee in and out from the top bar', function () {
 
     $this->travelTo(AttendanceHelper::at('2026-10-16 12:00'));
 
-    $component->call('toggle')
-        ->assertNotified(__('attendances::livewire/check-in-out.notifications.checked-out'))
-        ->assertSee('04:00');
+    Livewire::test(CheckInOut::class)
+        ->assertSee(__('attendances::livewire/check-in-out.actions.check-out'))
+        ->assertSee('04:00')
+        ->call('toggle')
+        ->assertNotified(__('attendances::livewire/check-in-out.notifications.checked-out'));
 
     expect($attendance->refresh()->out_mode)->toBe(AttendanceMode::TOP_BAR)
         ->and($attendance->worked_hours)->toEqualWithDelta(4.0, 0.01);
 });
 
-it('hides the button without a linked employee, permission or setting', function () {
+it('hides the check in/out modal without a linked employee, permission or setting', function () {
     Livewire::test(CheckInOut::class)
         ->assertDontSee(__('attendances::livewire/check-in-out.actions.check-in'));
 
@@ -65,4 +69,22 @@ it('hides the button without a linked employee, permission or setting', function
 
     Livewire::test(CheckInOut::class)
         ->assertDontSee(__('attendances::livewire/check-in-out.actions.check-in'));
+});
+
+it('shows the check in/out menu item and the status dot on the user icon', function () {
+    $employee = AttendanceHelper::scheduledEmployee(attributes: ['user_id' => $this->user->id]);
+
+    $this->user->forceFill(['is_active' => true])->save();
+
+    $this->get(AttendanceResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee(__('attendances::livewire/check-in-out.menu'))
+        ->assertSee('var(--danger-500)', false);
+
+    app(AttendanceWorkflow::class)->checkIn($employee);
+
+    $this->get(AttendanceResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('var(--success-500)', false)
+        ->assertSee('08:00');
 });

@@ -1,11 +1,16 @@
 <?php
 
 return [
+    'menu'    => 'Entrada/Saída',
+    'heading' => 'Presença',
+
     'status' => [
+        'out'         => 'Fora',
         'checked-in'  => 'Entrada registrada',
         'checked-out' => 'Saída registrada',
     ],
 
+    'since'            => 'Desde :time',
     'hours-today'      => 'Horas hoje',
     'overtime-balance' => 'Saldo de horas extras',
 

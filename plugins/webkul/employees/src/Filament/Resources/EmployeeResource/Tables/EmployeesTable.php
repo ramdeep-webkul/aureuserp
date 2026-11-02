@@ -63,8 +63,8 @@ class EmployeesTable
                                 ->formatStateUsing(fn (bool $state): string => $state
                                     ? __('attendances::filament/employee.presence.present')
                                     : __('attendances::filament/employee.presence.absent'))
-                                ->color(fn (bool $state): string => $state ? 'success' : 'gray')
-                                ->badge(),
+                                ->icon(fn (bool $state): string => $state ? 'heroicon-o-check-circle' : 'heroicon-o-x-circle')
+                                ->color(fn (bool $state): string => $state ? 'success' : 'danger'),
                         ])
                             ->visible(Package::isPluginInstalled('attendances')),
                         Stack::make([
