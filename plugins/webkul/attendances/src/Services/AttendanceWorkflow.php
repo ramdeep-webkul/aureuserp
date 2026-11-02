@@ -3,6 +3,8 @@
 namespace Webkul\Attendance\Services;
 
 use Carbon\Carbon;
+use Closure;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Webkul\Attendance\Enums\AttendanceMode;
@@ -14,12 +16,15 @@ use Webkul\Attendance\Events\OvertimeApproved;
 use Webkul\Attendance\Exceptions\AttendanceAccessException;
 use Webkul\Attendance\Exceptions\AttendanceValidationException;
 use Webkul\Attendance\Models\Attendance;
+use Webkul\Attendance\Models\Overtime;
 use Webkul\Attendance\Settings\AttendanceSettings;
 use Webkul\Employee\Models\Employee;
 use Webkul\Security\Enums\PermissionType;
 use Webkul\Security\Models\Scopes\OwnershipScope;
 use Webkul\Security\Models\User;
+use Webkul\Support\Models\Company;
 use Webkul\Support\Models\Scopes\CompanyScope;
+use Webkul\Support\Services\CompanyContext;
 
 class AttendanceWorkflow
 {
@@ -82,6 +87,8 @@ class AttendanceWorkflow
                     __('attendances::system.workflow.not-checked-in', ['employee' => $employee->name])
                 );
             }
+
+            $attendance->setRelation('employee', $employee);
 
             $attendance->fill([
                 'check_out'      => ($at ?? now())->copy()->utc(),
@@ -274,6 +281,82 @@ class AttendanceWorkflow
         return $attendance;
     }
 
+    public function closeForArchivedEmployee(Employee $employee): ?Attendance
+    {
+        if (! $this->openAttendance($employee)) {
+            return null;
+        }
+
+        return $this->checkOut($employee);
+    }
+
+    public function autoCheckOut(?Company $company): Collection
+    {
+        if (! $this->settings->auto_check_out) {
+            return collect();
+        }
+
+        $workedHours = app(WorkedHoursCalculator::class);
+
+        return $this->attendances()
+            ->where('company_id', $company?->id)
+            ->whereNull('check_out')
+            ->with('employee.calendar')
+            ->get()
+            ->filter(fn (Attendance $attendance) => $attendance->employee?->calendar && ! $workedHours->isFlexible($attendance->employee))
+            ->map(fn (Attendance $attendance) => $this->autoCheckOutAttendance($attendance))
+            ->filter()
+            ->values();
+    }
+
+    public function detectAbsences(?Company $company): Collection
+    {
+        if (! $this->settings->absence_management) {
+            return collect();
+        }
+
+        $workedHours = app(WorkedHoursCalculator::class);
+
+        return Employee::withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $company?->id)
+            ->whereNotNull('calendar_id')
+            ->with('calendar')
+            ->get()
+            ->reject(fn (Employee $employee) => $employee->is_fully_flexible || $workedHours->isFlexible($employee))
+            ->map(fn (Employee $employee) => $this->recordAbsence($employee))
+            ->filter()
+            ->values();
+    }
+
+    public static function forCompany(?Company $company, Closure $callback): mixed
+    {
+        if (! $company) {
+            return $callback(app(static::class));
+        }
+
+        $context = app(CompanyContext::class);
+
+        app()->instance(CompanyContext::class, new class($company->id) extends CompanyContext
+        {
+            public function __construct(protected int $companyId) {}
+
+            public function currentId(): ?int
+            {
+                return $this->companyId;
+            }
+        });
+
+        app()->forgetInstance(AttendanceSettings::class);
+
+        try {
+            return $callback(app(static::class));
+        } finally {
+            app()->instance(CompanyContext::class, $context);
+
+            app()->forgetInstance(AttendanceSettings::class);
+        }
+    }
+
     public function canApprove(?User $user, Attendance $attendance): bool
     {
         if (! $user) {
@@ -302,6 +385,117 @@ class AttendanceWorkflow
             ->whereNull('check_out')
             ->latest('check_in')
             ->first();
+    }
+
+    protected function autoCheckOutAttendance(Attendance $attendance): ?Attendance
+    {
+        $employee = $attendance->employee;
+
+        $workedHours = app(WorkedHoursCalculator::class);
+
+        $timezone = $workedHours->timezone($employee);
+
+        $date = $workedHours->localDate($employee, $attendance->check_in);
+
+        $start = Carbon::parse($date, $timezone)->utc();
+
+        $earlierHours = (float) $this->attendances()
+            ->where('employee_id', $employee->id)
+            ->whereNotNull('check_out')
+            ->where('check_in', '>=', $start)
+            ->where('check_in', '<', $attendance->check_in)
+            ->sum('worked_hours');
+
+        $expectedHours = collect(array_merge(
+            $workedHours->scheduleIntervals($employee->calendar, $date, $timezone),
+            $workedHours->scheduleIntervals($employee->calendar, $date, $timezone, lunch: true),
+        ))->sum(fn (array $interval) => $interval[0]->diffInSeconds($interval[1]) / 3600);
+
+        $tolerance = (float) $this->settings->auto_check_out_tolerance;
+
+        $openHours = $attendance->check_in->diffInSeconds(now()) / 3600;
+
+        if ($openHours + $earlierHours - $tolerance <= $expectedHours) {
+            return null;
+        }
+
+        $checkOut = $attendance->check_in->copy()->addSeconds(
+            max(1, (int) round((max(0.0, $expectedHours - $earlierHours) + $tolerance) * 3600))
+        );
+
+        try {
+            $attendance = $this->checkOut($employee, AttendanceMode::AUTO_CHECK_OUT, $checkOut);
+        } catch (AttendanceValidationException) {
+            return null;
+        }
+
+        $attendance->addMessage([
+            'body'       => __('attendances::system.workflow.auto-checked-out'),
+            'type'       => 'comment',
+            'company_id' => $attendance->company_id,
+        ]);
+
+        return $attendance;
+    }
+
+    protected function recordAbsence(Employee $employee): ?Attendance
+    {
+        $workedHours = app(WorkedHoursCalculator::class);
+
+        $day = now($workedHours->timezone($employee))->subDay()->startOfDay();
+
+        $start = $day->copy()->utc();
+
+        $hasLedger = Overtime::withoutGlobalScopes([CompanyScope::class, OwnershipScope::class])
+            ->where('employee_id', $employee->id)
+            ->whereDate('date', $day->toDateString())
+            ->exists();
+
+        $hasAttendance = $this->attendances()
+            ->where('employee_id', $employee->id)
+            ->where('check_in', '<', $start->copy()->addDay())
+            ->where(fn ($query) => $query->whereNull('check_out')->orWhere('check_out', '>', $start))
+            ->exists();
+
+        if ($hasLedger || $hasAttendance) {
+            return null;
+        }
+
+        $attendance = DB::transaction(function () use ($employee, $start): Attendance {
+            $this->lockEmployee($employee);
+
+            $attendance = new Attendance([
+                'employee_id'     => $employee->id,
+                'company_id'      => $employee->company_id,
+                'check_in'        => $start,
+                'check_out'       => $start->copy()->addSecond(),
+                'in_mode'         => AttendanceMode::TECHNICAL,
+                'out_mode'        => AttendanceMode::TECHNICAL,
+                'overtime_status' => $this->initialOvertimeStatus(),
+            ]);
+
+            $attendance->setRelation('employee', $employee);
+
+            $this->saveWithHours($attendance);
+
+            $this->recompute($attendance);
+
+            return $attendance->refresh();
+        });
+
+        if (abs($attendance->overtime_hours) < 0.005) {
+            $attendance->forceDelete();
+
+            return null;
+        }
+
+        $attendance->addMessage([
+            'body'       => __('attendances::system.workflow.absence-detected'),
+            'type'       => 'comment',
+            'company_id' => $attendance->company_id,
+        ]);
+
+        return $attendance;
     }
 
     protected function assertValid(Attendance $attendance): void

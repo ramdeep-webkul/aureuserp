@@ -3,7 +3,10 @@
 namespace Webkul\Attendance;
 
 use Filament\Contracts\Plugin;
+use Filament\Facades\Filament;
 use Filament\Panel;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\Facades\Blade;
 use Webkul\PluginManager\Package;
 
 class AttendancePlugin implements Plugin
@@ -42,6 +45,12 @@ class AttendancePlugin implements Plugin
                     ->discoverWidgets(
                         in: __DIR__.'/Filament/Widgets',
                         for: 'Webkul\\Attendance\\Filament\\Widgets'
+                    )
+                    ->renderHook(
+                        PanelsRenderHook::TOPBAR_END,
+                        fn (): string => Filament::auth()->check()
+                            ? Blade::render("@livewire('attendances-check-in-out')")
+                            : '',
                     );
             });
     }
