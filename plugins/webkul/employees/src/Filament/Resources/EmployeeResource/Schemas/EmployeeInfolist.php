@@ -20,10 +20,15 @@ use Filament\Support\Enums\IconPosition;
 use Filament\Support\Enums\TextSize;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection as SupportCollection;
+use Webkul\Attendance\Filament\Clusters\Overview\Resources\AttendanceResource;
+use Webkul\Attendance\Models\Attendance;
+use Webkul\Attendance\Models\Overtime;
+use Webkul\Attendance\Settings\AttendanceSettings;
 use Webkul\Employee\Models\Employee;
 use Webkul\Employee\Models\EmployeeResume;
 use Webkul\Employee\Models\EmployeeResumeAttachment;
 use Webkul\Employee\Models\EmployeeSkill;
+use Webkul\PluginManager\Package;
 use Webkul\Support\Filament\Tables\Infolists\ProgressBarEntry;
 
 class EmployeeInfolist
@@ -410,6 +415,20 @@ class EmployeeInfolist
                                                         TextEntry::make('pin')
                                                             ->placeholder('—')
                                                             ->label(__('employees::filament/resources/employee.infolist.tabs.settings.entries.pin')),
+                                                        TextEntry::make('attendance_presence')
+                                                            ->label(__('attendances::filament/employee.entries.presence'))
+                                                            ->state(fn (Employee $record): bool => Attendance::isCheckedIn($record))
+                                                            ->formatStateUsing(fn (bool $state): string => $state
+                                                                ? __('attendances::filament/employee.presence.present')
+                                                                : __('attendances::filament/employee.presence.absent'))
+                                                            ->color(fn (bool $state): string => $state ? 'success' : 'gray')
+                                                            ->badge()
+                                                            ->visible(Package::isPluginInstalled('attendances')),
+                                                        TextEntry::make('attendance_overtime')
+                                                            ->label(__('attendances::filament/employee.entries.overtime'))
+                                                            ->state(fn (Employee $record): string => AttendanceResource::formatHours(Overtime::balanceFor($record)))
+                                                            ->icon('heroicon-o-clock')
+                                                            ->visible(fn (): bool => Package::isPluginInstalled('attendances') && app(AttendanceSettings::class)->display_overtime),
                                                     ])
                                                     ->columns(1),
                                             ])

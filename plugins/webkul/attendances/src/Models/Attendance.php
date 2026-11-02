@@ -14,14 +14,18 @@ use Webkul\Chatter\Traits\HasChatter;
 use Webkul\Chatter\Traits\HasLogActivity;
 use Webkul\Employee\Models\Employee;
 use Webkul\Field\Traits\HasCustomFields;
+use Webkul\Security\Models\Scopes\OwnershipScope;
 use Webkul\Security\Models\User;
+use Webkul\Security\Support\OwnerSource;
+use Webkul\Security\Traits\HasOwnershipScope;
 use Webkul\Support\Models\Company;
+use Webkul\Support\Models\Scopes\CompanyScope;
 use Webkul\Support\Traits\BelongsToCompany;
 
 class Attendance extends Model
 {
     use BelongsToCompany;
-    use HasChatter, HasCustomFields, HasFactory, HasLogActivity, SoftDeletes;
+    use HasChatter, HasCustomFields, HasFactory, HasLogActivity, HasOwnershipScope, SoftDeletes;
 
     protected $table = 'attendances_attendances';
 
@@ -88,6 +92,23 @@ class Attendance extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function ownershipSources(): array
+    {
+        return [
+            OwnerSource::column('creator_id'),
+            OwnerSource::relation('employee', 'employees_employees.user_id'),
+            OwnerSource::relation('employee', 'employees_employees.attendance_manager_id'),
+        ];
+    }
+
+    public static function isCheckedIn(Employee $employee): bool
+    {
+        return static::withoutGlobalScopes([CompanyScope::class, OwnershipScope::class])
+            ->where('employee_id', $employee->id)
+            ->whereNull('check_out')
+            ->exists();
     }
 
     protected static function boot()

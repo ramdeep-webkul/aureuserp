@@ -28,8 +28,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
+use Webkul\Attendance\Models\Attendance;
 use Webkul\Chatter\Filament\Actions\ActivityTableAction;
 use Webkul\Employee\Models\Employee;
+use Webkul\PluginManager\Package;
 
 class EmployeesTable
 {
@@ -55,6 +57,16 @@ class EmployeesTable
                                 ->label(__('employees::filament/resources/employee.table.columns.job-title')),
                         ])
                             ->visible(fn ($record) => filled($record->job_title)),
+                        Stack::make([
+                            TextColumn::make('attendance_presence')
+                                ->state(fn (Employee $record): bool => Attendance::isCheckedIn($record))
+                                ->formatStateUsing(fn (bool $state): string => $state
+                                    ? __('attendances::filament/employee.presence.present')
+                                    : __('attendances::filament/employee.presence.absent'))
+                                ->color(fn (bool $state): string => $state ? 'success' : 'gray')
+                                ->badge(),
+                        ])
+                            ->visible(Package::isPluginInstalled('attendances')),
                         Stack::make([
                             TextColumn::make('work_email')
                                 ->icon('heroicon-o-envelope')

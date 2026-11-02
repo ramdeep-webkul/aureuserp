@@ -9,6 +9,7 @@ use Webkul\Attendance\Models\Attendance;
 use Webkul\Attendance\Models\Overtime;
 use Webkul\Attendance\Settings\AttendanceSettings;
 use Webkul\Employee\Models\Employee;
+use Webkul\Security\Models\Scopes\OwnershipScope;
 use Webkul\Support\Models\Calendar;
 use Webkul\Support\Models\CalendarLeave;
 use Webkul\Support\Models\Scopes\CompanyScope;
@@ -226,7 +227,7 @@ class OvertimeCalculator
 
     protected function storeLedger(Employee $employee, string $date, float $duration, float $durationReal): void
     {
-        $overtime = Overtime::withoutGlobalScope(CompanyScope::class)
+        $overtime = Overtime::withoutGlobalScopes([CompanyScope::class, OwnershipScope::class])
             ->where('employee_id', $employee->id)
             ->whereDate('date', $date)
             ->where('adjustment', false)
@@ -298,7 +299,7 @@ class OvertimeCalculator
     {
         $start = Carbon::parse($date, app(WorkedHoursCalculator::class)->timezone($employee))->utc();
 
-        return Attendance::withoutGlobalScope(CompanyScope::class)
+        return Attendance::withoutGlobalScopes([CompanyScope::class, OwnershipScope::class])
             ->where('employee_id', $employee->id)
             ->where('check_in', '>=', $start)
             ->where('check_in', '<', $start->copy()->addDay())

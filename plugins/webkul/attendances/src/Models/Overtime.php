@@ -10,14 +10,18 @@ use Webkul\Attendance\Database\Factories\OvertimeFactory;
 use Webkul\Chatter\Traits\HasChatter;
 use Webkul\Chatter\Traits\HasLogActivity;
 use Webkul\Employee\Models\Employee;
+use Webkul\Security\Models\Scopes\OwnershipScope;
 use Webkul\Security\Models\User;
+use Webkul\Security\Support\OwnerSource;
+use Webkul\Security\Traits\HasOwnershipScope;
 use Webkul\Support\Models\Company;
+use Webkul\Support\Models\Scopes\CompanyScope;
 use Webkul\Support\Traits\BelongsToCompany;
 
 class Overtime extends Model
 {
     use BelongsToCompany;
-    use HasChatter, HasFactory, HasLogActivity;
+    use HasChatter, HasFactory, HasLogActivity, HasOwnershipScope;
 
     protected $table = 'attendances_overtimes';
 
@@ -66,6 +70,22 @@ class Overtime extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function ownershipSources(): array
+    {
+        return [
+            OwnerSource::column('creator_id'),
+            OwnerSource::relation('employee', 'employees_employees.user_id'),
+            OwnerSource::relation('employee', 'employees_employees.attendance_manager_id'),
+        ];
+    }
+
+    public static function balanceFor(Employee $employee): float
+    {
+        return (float) static::withoutGlobalScopes([CompanyScope::class, OwnershipScope::class])
+            ->where('employee_id', $employee->id)
+            ->sum('duration');
     }
 
     protected static function boot()

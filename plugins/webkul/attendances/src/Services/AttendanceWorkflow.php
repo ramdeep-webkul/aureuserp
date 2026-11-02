@@ -17,6 +17,7 @@ use Webkul\Attendance\Models\Attendance;
 use Webkul\Attendance\Settings\AttendanceSettings;
 use Webkul\Employee\Models\Employee;
 use Webkul\Security\Enums\PermissionType;
+use Webkul\Security\Models\Scopes\OwnershipScope;
 use Webkul\Security\Models\User;
 use Webkul\Support\Models\Scopes\CompanyScope;
 
@@ -421,7 +422,7 @@ class AttendanceWorkflow
 
     protected function attendances()
     {
-        return Attendance::withoutGlobalScope(CompanyScope::class);
+        return Attendance::withoutGlobalScopes([CompanyScope::class, OwnershipScope::class]);
     }
 
     protected function format(Employee $employee, Carbon $moment): string
