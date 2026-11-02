@@ -13,6 +13,7 @@ class CompanyAwareSettingsRepository extends DatabaseSettingsRepository
         'accounts_taxes',
         'point_of_sale_account',
         'point_of_sale_inventory',
+        'attendances_attendance',
     ];
 
     protected static ?bool $hasCompanyColumn = null;

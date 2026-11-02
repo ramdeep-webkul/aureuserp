@@ -7,6 +7,7 @@ use App\Providers\Filament\PosPanelProvider;
 use Webkul\Account\AccountServiceProvider;
 use Webkul\Accounting\AccountingServiceProvider;
 use Webkul\Analytic\AnalyticServiceProvider;
+use Webkul\Attendance\AttendanceServiceProvider;
 use Webkul\Barcode\BarcodeServiceProvider;
 use Webkul\Blog\BlogServiceProvider;
 use Webkul\Chatter\ChatterServiceProvider;
@@ -64,6 +65,7 @@ return [
     SupportServiceProvider::class,
     TableViewsServiceProvider::class,
     TimeOffServiceProvider::class,
+    AttendanceServiceProvider::class,
     FullCalendarServiceProvider::class,
     TimesheetServiceProvider::class,
     WebsiteServiceProvider::class,

@@ -14,6 +14,7 @@ return [
         'project'             => 'Proyecto',
         'employee'            => 'Empleados',
         'time-off'            => 'Ausencias',
+        'attendance'          => 'Asistencia',
         'recruitment'         => 'Contrataciones',
         'website'             => 'Sitio web',
         'plugin'              => 'Complementos',

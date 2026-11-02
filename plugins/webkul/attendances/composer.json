@@ -1,0 +1,30 @@
+{
+    "name": "webkul/attendances",
+    "description": "Employee check-in, check-out and overtime tracking",
+    "authors": [
+        {
+            "name": "Aureus ERP",
+            "email": "support@aureuserp.in"
+        }
+    ],
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Webkul\\Attendance\\AttendanceServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Webkul\\Attendance\\": "src/",
+            "Webkul\\Attendance\\Database\\Factories\\": "database/factories/",
+            "Webkul\\Attendance\\Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Webkul\\Attendance\\Tests\\": "tests/"
+        }
+    }
+}

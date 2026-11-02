@@ -44,6 +44,9 @@
         <testsuite name="SecurityFeature">
             <directory>plugins/webkul/security/tests/Feature</directory>
         </testsuite>
+        <testsuite name="AttendanceFeature">
+            <directory>plugins/webkul/attendances/tests/Feature</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>

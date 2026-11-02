@@ -14,6 +14,7 @@ return [
         'project'             => 'المشاريع',
         'employee'            => 'الموظفين',
         'time-off'            => 'الإجازات',
+        'attendance'          => 'الحضور',
         'recruitment'         => 'التوظيف',
         'website'             => 'الموقع الإلكتروني',
         'plugin'              => 'الإضافات',
